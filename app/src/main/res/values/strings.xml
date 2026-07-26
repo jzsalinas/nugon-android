@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Nugon SOS</string>
+    <string name="accessibility_service_description">Detecta presión prolongada de botones de volumen para enviar alertas de emergencia.</string>
+    <string name="emergency_notification_title">Nugon SOS Activo</string>
+    <string name="emergency_notification_content">Protección de emergencia activa. Mantén presionado volumen para avisar.</string>
+    <string name="alert_sent_message">¡ALERTA ENVIADA! Tus familiares han sido notificados.</string>
+    <string name="config_title">Nugon SOS - Configuración</string>
+    <string name="contacts_label">Contactos de Emergencia (separados por coma)</string>
+    <string name="contacts_hint">+595981123456, +595971987654</string>
+    <string name="backend_url_label">URL de Notificación PWA (Backend)</string>
+    <string name="backend_url_hint">https://tu-servidor.com/api/alerta</string>
+    <string name="sender_id_label">Tu Nombre o ID de Emisor (para familiares)</string>
+    <string name="sender_id_hint">Ej: Prima Maria</string>
+    <string name="save_button">Guardar Configuración</string>
+    <string name="special_permissions_label">Permisos Especiales</string>
+    <string name="accessibility_button">Activar Servicio Accesibilidad</string>
+    <string name="battery_button">Configurar Batería (Sin Restricción)</string>
+    <string name="test_alert_button">ENVIAR ALERTA DE PRUEBA</string>
+    <string name="message_label">Mensaje de Emergencia (Máx 21 caracteres)</string>
+    <string name="message_default">ALERTA DE CONVULSION!</string>
+    <string name="config_saved">Configuración guardada</string>
+    <string name="permissions_required">Permisos necesarios para funcionar</string>
+</resources>
