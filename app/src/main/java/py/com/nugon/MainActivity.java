@@ -59,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
                     .putString("sender_id", senderIdEditText.getText().toString())
                     .apply();
             Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show();
+            startMonitor();
         });
 
         accessibilityButton.setOnClickListener(v -> {
@@ -79,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
 
         testButton.setOnClickListener(v -> {
             Intent intent = new Intent(this, EmergencyService.class);
+            intent.setAction(EmergencyService.ACTION_TRIGGER_EMERGENCY);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(intent);
             } else {
@@ -87,6 +89,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
         requestPermissions();
+        startMonitor();
+    }
+
+    private void startMonitor() {
+        Intent intent = new Intent(this, EmergencyService.class);
+        intent.setAction(EmergencyService.ACTION_START_MONITOR);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
     }
 
     @Override
@@ -100,18 +113,22 @@ public class MainActivity extends AppCompatActivity {
         if (isAccessibilityServiceEnabled()) {
             accessibilityButton.setText("Servicio Activo ✅");
             accessibilityButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
+            accessibilityButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         } else {
             accessibilityButton.setText("Activar Servicio Accesibilidad ⚠️");
             accessibilityButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark));
+            accessibilityButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         }
 
         Button batteryButton = findViewById(R.id.batteryButton);
         if (isIgnoringBatteryOptimizations()) {
             batteryButton.setText("Batería: Sin restricciones ✅");
             batteryButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
+            batteryButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         } else {
             batteryButton.setText("Batería: Optimizada (Cambiar) ⚠️");
             batteryButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark));
+            batteryButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         }
     }
 
@@ -147,6 +164,14 @@ public class MainActivity extends AppCompatActivity {
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
         };
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Background location is requested separately or as part of the list on some versions
+            String[] extendedPerms = new String[permissions.length + 1];
+            System.arraycopy(permissions, 0, extendedPerms, 0, permissions.length);
+            extendedPerms[permissions.length] = Manifest.permission.ACCESS_BACKGROUND_LOCATION;
+            permissions = extendedPerms;
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             String[] newPerms = new String[permissions.length + 1];

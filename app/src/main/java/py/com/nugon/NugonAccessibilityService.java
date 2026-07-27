@@ -1,9 +1,13 @@
 package py.com.nugon;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 import android.util.Log;
@@ -15,6 +19,7 @@ public class NugonAccessibilityService extends AccessibilityService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean isButtonPressed = false;
     private int pressedKeyCode = -1;
+    private PowerManager.WakeLock wakeLock;
 
     private final Runnable longPressRunnable = new Runnable() {
         @Override
@@ -22,6 +27,7 @@ public class NugonAccessibilityService extends AccessibilityService {
             if (isButtonPressed) {
                 Log.i(TAG, "Emergency long-press detected!");
                 triggerEmergency();
+                releaseWakeLock(); // Release after trigger
                 isButtonPressed = false; // Reset to avoid double trigger
             }
         }
@@ -31,6 +37,11 @@ public class NugonAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         Log.i(TAG, "Nugon Accessibility Service CONNECTED and ready.");
+        
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (pm != null) {
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Nugon:A11yWakeLock");
+        }
     }
 
     @Override
@@ -45,12 +56,15 @@ public class NugonAccessibilityService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        // We still keep A11y interception for when the screen is ON/LOCKED-AWAKE.
+        // It provides better precision for KEYCODE_VOLUME_UP/DOWN.
         int keyCode = event.getKeyCode();
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
             int action = event.getAction();
 
             if (action == KeyEvent.ACTION_DOWN) {
                 if (!isButtonPressed) {
+                    acquireWakeLock();
                     isButtonPressed = true;
                     pressedKeyCode = keyCode;
                     handler.postDelayed(longPressRunnable, LONG_PRESS_TIMEOUT);
@@ -58,18 +72,34 @@ public class NugonAccessibilityService extends AccessibilityService {
             } else if (action == KeyEvent.ACTION_UP) {
                 if (isButtonPressed && keyCode == pressedKeyCode) {
                     handler.removeCallbacks(longPressRunnable);
+                    releaseWakeLock();
                     isButtonPressed = false;
                 }
             }
-            // Return false to allow the system to still handle volume changes if desired, 
-            // or true to consume it. For an emergency app, consuming might be safer.
+            // Return false to allow the system to still handle volume changes if desired.
             return false; 
         }
         return super.onKeyEvent(event);
     }
 
+    private void acquireWakeLock() {
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            // Acquire with timeout as a safety measure (3 seconds is enough for 1.5s detection)
+            wakeLock.acquire(3000);
+            Log.d(TAG, "WakeLock acquired for button detection");
+        }
+    }
+
+    private void releaseWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+            Log.d(TAG, "WakeLock released");
+        }
+    }
+
     private void triggerEmergency() {
         Intent intent = new Intent(this, EmergencyService.class);
+        intent.setAction(EmergencyService.ACTION_TRIGGER_EMERGENCY);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             startForegroundService(intent);
         } else {

@@ -2,40 +2,43 @@
 
 **Nugon SOS** es una aplicación Android de código abierto diseñada para personas con movilidad reducida o condiciones médicas (como convulsiones) que requieren una forma ultrarrápida de pedir ayuda.
 
-Esta aplicación permite enviar alertas de emergencia en menos de 2 segundos mediante la presión prolongada de los botones de volumen, incluso con la pantalla bloqueada.
+Esta aplicación permite enviar alertas de emergencia en menos de 2 segundos mediante la presión prolongada de los botones de volumen, incluso con la pantalla bloqueada y el dispositivo en reposo profundo.
 
 ## 🌟 Características
 
 - **Activación por Hardware**: Intercepta la presión prolongada (1.5s) de los botones de Volumen (+ o -).
-- **Alertas Redundantes**:
+- **Redundancia Total**: Funciona con la pantalla apagada, el celular bloqueado y sin estar conectado al cargador.
+- **Alertas Duales**:
   - **SMS**: Envía mensajes de texto con la ubicación exacta (Google Maps) a múltiples contactos.
-  - **Notificación PWA (Web Push)**: Envía una alerta a una PWA instalada por los familiares.
-- **Confirmación Háptica**: Vibra al detectar la emergencia para confirmar el envío de forma ciega.
-- **Funcionamiento en Bloqueo**: Diseñada para funcionar con el celular bloqueado o en modo reposo (Doze mode).
-- **Privacidad**: 100% local, solo envía datos a los contactos y al servidor configurado por el usuario.
+  - **Notificación PWA (Web Push)**: Envía un payload JSON a un servidor backend para notificar a familiares mediante Web Push.
+- **Confirmación Háptica**: Sistema de vibraciones para confirmar que el botón ha sido detectado y que la alerta ha sido enviada con éxito.
+- **Monitor Permanente**: Servicio en primer plano diseñado para ser indestructible por el sistema de ahorro de energía.
 
 ## 🚀 Instalación y Configuración
 
-Dado que la aplicación utiliza permisos sensibles para garantizar su funcionamiento, sigue estos pasos:
+Dado que la aplicación utiliza servicios de sistema críticos, sigue estos pasos para garantizar su fiabilidad:
 
-1. **Permisos de Sistema**: Concede permisos de SMS, Ubicación y Notificaciones cuando la app lo solicite.
+1. **Permisos de Sistema**: Concede permisos de SMS, Ubicación (seleccionar "Permitir todo el tiempo") y Notificaciones.
 2. **Servicio de Accesibilidad**:
    - Ve a `Ajustes > Accesibilidad`.
-   - Busca y activa **Nugon SOS**. Esto es necesario para detectar los botones físicos.
+   - Activa **Nugon SOS**. Esto otorga prioridad a la app para leer eventos de hardware.
 3. **Optimización de Batería**:
    - En la app, presiona "Configurar Batería".
-   - Selecciona **"Sin restricciones"** (o "No optimizar"). Esto evita que Android cierre la app en segundo plano.
+   - Selecciona **"Sin restricciones"** (o "No optimizar"). 
 4. **Configuración de Alerta**:
-   - Ingresa los números de teléfono de emergencia (separados por coma).
-   - Configura un "ID de Emisor" para que tus familiares sepan quién envía la alerta.
-   - (Opcional) Configura la URL de tu servidor para notificaciones PWA.
+   - **Contactos**: Números de teléfono separados por coma (Ej: +595981123456).
+   - **Sender ID**: Tu nombre para que tus familiares identifiquen quién envía la alerta.
+   - **Mensaje**: Un texto corto (máx 21 caracteres) para el SMS.
+
+> [!NOTE]
+> **Compatibilidad**: En algunos dispositivos muy agresivos con el ahorro de energía, si la alerta no responde con la pantalla apagada, toca la pantalla una vez para despertarla y luego mantén presionado el botón de volumen.
 
 ## 🛠️ Tecnologías
 
 - **Lenguaje**: Java (Android Nativo)
-- **Servicios**: `AccessibilityService`, `Foreground Service` con `WakeLock`.
-- **Ubicación**: `FusedLocationProviderClient` (Google Play Services).
-- **Red**: OkHttp para peticiones al backend.
+- **Detección**: `MediaSession` con `VolumeProvider` + `AccessibilityService`.
+- **Ubicación**: `FusedLocationProviderClient` de alta precisión.
+- **Red**: OkHttp para integración con el ecosistema PWA.
 
 ## 📜 Licencia
 

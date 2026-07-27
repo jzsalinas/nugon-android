@@ -11,8 +11,19 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.location.Location;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
+import android.media.VolumeProvider;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -22,6 +33,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.media.VolumeProviderCompat;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationRequest;
@@ -32,10 +44,22 @@ import com.google.android.gms.tasks.OnSuccessListener;
 public class EmergencyService extends Service {
     private static final String TAG = "EmergencyService";
     private static final String CHANNEL_ID = "emergency_channel";
+    
+    public static final String ACTION_START_MONITOR = "py.com.nugon.START_MONITOR";
+    public static final String ACTION_TRIGGER_EMERGENCY = "py.com.nugon.TRIGGER_EMERGENCY";
     private static final String ACTION_SMS_SENT = "py.com.nugon.SMS_SENT";
+    
+    private static final long LONG_PRESS_THRESHOLD = 1500; // 1.5 seconds
     
     private FusedLocationProviderClient fusedLocationClient;
     private PowerManager.WakeLock wakeLock;
+    private MediaSessionCompat mediaSession;
+    private AudioTrack silentAudioTrack;
+    
+    private long firstPressTime = 0;
+    private int lastDirection = 0;
+    private final Handler detectionHandler = new Handler(Looper.getMainLooper());
+    private boolean isTriggered = false;
 
     private final BroadcastReceiver smsSentReceiver = new BroadcastReceiver() {
         @Override
@@ -73,25 +97,150 @@ public class EmergencyService extends Service {
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Nugon:EmergencyWakeLock");
         }
+        
+        setupMediaSession();
+        startSilentAudio();
+    }
+
+    private void startSilentAudio() {
+        try {
+            int sampleRate = 44100;
+            int minBufferSize = AudioTrack.getMinBufferSize(sampleRate, 
+                    AudioFormat.CHANNEL_OUT_MONO, 
+                    AudioFormat.ENCODING_PCM_16BIT);
+
+            silentAudioTrack = new AudioTrack.Builder()
+                    .setAudioAttributes(new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build())
+                    .setAudioFormat(new AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build())
+                    .setBufferSizeInBytes(minBufferSize)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build();
+
+            byte[] silence = new byte[minBufferSize];
+            silentAudioTrack.write(silence, 0, silence.length);
+            silentAudioTrack.setLoopPoints(0, silence.length / 2, -1);
+            
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    AudioFocusRequest request = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                            .build();
+                    am.requestAudioFocus(request);
+                } else {
+                    am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
+                }
+            }
+
+            silentAudioTrack.play();
+            Log.i(TAG, "Silent audio loop started to keep volume buttons active.");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start silent audio", e);
+        }
+    }
+
+    private void setupMediaSession() {
+        if (mediaSession != null) return;
+
+        mediaSession = new MediaSessionCompat(this, "NugonEmergencySession");
+        
+        MediaMetadataCompat metadata = new MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Protección Nugon SOS")
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Activo")
+                .build();
+        mediaSession.setMetadata(metadata);
+
+        VolumeProviderCompat volumeProvider = new VolumeProviderCompat(VolumeProviderCompat.VOLUME_CONTROL_RELATIVE, 100, 50) {
+            @Override
+            public void onAdjustVolume(int direction) {
+                handleVolumeKey(direction);
+            }
+        };
+
+        mediaSession.setPlaybackToRemote(volumeProvider);
+        mediaSession.setActive(true);
+        
+        PlaybackStateCompat state = new PlaybackStateCompat.Builder()
+                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1.0f)
+                .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE)
+                .build();
+        mediaSession.setPlaybackState(state);
+        Log.i(TAG, "MediaSession setup complete and active.");
+    }
+
+    private synchronized void handleVolumeKey(int direction) {
+        long currentTime = System.currentTimeMillis();
+        
+        if (isTriggered) return;
+
+        if (firstPressTime == 0 || direction != lastDirection) {
+            vibrate(50); // Diagnostic vibration only on first press
+            firstPressTime = currentTime;
+            lastDirection = direction;
+            Log.d(TAG, "Volume press start, direction: " + direction);
+        } else {
+            if (currentTime - firstPressTime >= LONG_PRESS_THRESHOLD) {
+                Log.i(TAG, "Emergency threshold met via MediaSession!");
+                isTriggered = true;
+                triggerEmergency();
+                firstPressTime = 0;
+            }
+        }
+        
+        detectionHandler.removeCallbacksAndMessages(null);
+        detectionHandler.postDelayed(() -> {
+            if (!isTriggered) {
+                firstPressTime = 0;
+            }
+        }, 500);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (wakeLock != null && !wakeLock.isHeld()) {
-            wakeLock.acquire(15000); // Increased to 15s to allow for GPS fix
-        }
         startForeground(1, getNotification());
-        triggerEmergency();
-        return START_NOT_STICKY;
+
+        String action = intent != null ? intent.getAction() : null;
+        Log.i(TAG, "onStartCommand with action: " + action);
+
+        if (ACTION_TRIGGER_EMERGENCY.equals(action)) {
+            if (!isTriggered) {
+                isTriggered = true;
+                triggerEmergency();
+            }
+        } else {
+            setupMediaSession();
+            if (silentAudioTrack == null || silentAudioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                startSilentAudio();
+            }
+        }
+        
+        return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
         try {
             unregisterReceiver(smsSentReceiver);
-        } catch (Exception e) {
-            Log.e(TAG, "Receiver already unregistered or not found");
+        } catch (Exception ignored) {}
+        
+        if (silentAudioTrack != null) {
+            try {
+                silentAudioTrack.stop();
+                silentAudioTrack.release();
+            } catch (Exception ignored) {}
         }
+
+        if (mediaSession != null) {
+            mediaSession.setActive(false);
+            mediaSession.release();
+        }
+        
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
         }
@@ -99,8 +248,12 @@ public class EmergencyService extends Service {
     }
 
     private void triggerEmergency() {
-        vibrate();
+        vibrate(1000); // Restored to original 1 second for better emergency feedback
         
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire(15000); 
+        }
+
         try {
             fusedLocationClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
                 @Override
@@ -108,14 +261,11 @@ public class EmergencyService extends Service {
                     if (location != null) {
                         sendAlerts(location.getLatitude(), location.getLongitude());
                     } else {
-                        // Request a fresh single location update if last location is null
-                        Log.i(TAG, "Last location null, requesting fresh update...");
                         requestFreshLocation();
                     }
                 }
             });
         } catch (SecurityException e) {
-            Log.e(TAG, "Location permission missing", e);
             sendAlerts(0, 0);
         }
     }
@@ -170,7 +320,6 @@ public class EmergencyService extends Service {
                         String destination = contact.trim();
                         java.util.ArrayList<String> parts = smsManager.divideMessage(message);
                         
-                        // Create PendingIntent to track delivery
                         java.util.ArrayList<PendingIntent> sentIntents = new java.util.ArrayList<>();
                         Intent sentIntent = new Intent(ACTION_SMS_SENT);
                         PendingIntent pi = PendingIntent.getBroadcast(this, 0, sentIntent, PendingIntent.FLAG_IMMUTABLE);
@@ -187,28 +336,41 @@ public class EmergencyService extends Service {
 
         NetworkClient.sendAlert(backendUrl, senderId, message, lat, lon);
         
-        // Give some time for the SENT broadcast to arrive before stopping service
-        new android.os.Handler().postDelayed(this::stopSelf, 5000);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            isTriggered = false;
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+            }
+            Log.i(TAG, "Ready for next emergency.");
+        }, 10000);
     }
 
-    private void vibrate() {
+    private void vibrate(long duration) {
         Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         if (v != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                v.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE));
+                v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
             } else {
-                v.vibrate(1000);
+                v.vibrate(duration);
             }
         }
     }
 
     private Notification getNotification() {
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.emergency_notification_title))
                 .setContentText(getString(R.string.emergency_notification_content))
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build();
+                .setOngoing(true);
+
+        if (mediaSession != null) {
+            builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                    .setMediaSession(mediaSession.getSessionToken())
+                    .setShowActionsInCompactView(0));
+        }
+
+        return builder.build();
     }
 
     private void createNotificationChannel() {

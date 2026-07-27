@@ -19,5 +19,7 @@
     <string name="message_label">Mensaje de Emergencia (Máx 21 caracteres)</string>
     <string name="message_default">ALERTA DE CONVULSION!</string>
     <string name="config_saved">Configuración guardada</string>
+    <string name="instructions_title">💡 ¿Cómo activar la alerta?</string>
+    <string name="instructions_content">1. Asegúrate de que el servicio esté activo ✅.\n2. Mantén presionado SUBIR o BAJAR VOLUMEN por 1.5s.\n3. Si la pantalla está apagada y no responde, toca la pantalla una vez para despertarla y luego mantén el botón.</string>
     <string name="permissions_required">Permisos necesarios para funcionar</string>
 </resources>
