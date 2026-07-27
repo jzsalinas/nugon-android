@@ -425,8 +425,9 @@ public class EmergencyService extends Service {
                 .setContentTitle(getString(R.string.emergency_notification_title))
                 .setContentText(getString(R.string.emergency_notification_content))
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setOngoing(true);
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true);
 
         if (mediaSession != null && mediaSession.isActive()) {
             builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
@@ -442,7 +443,7 @@ public class EmergencyService extends Service {
             NotificationChannel serviceChannel = new NotificationChannel(
                     CHANNEL_ID,
                     "Emergency Service Channel",
-                    NotificationManager.IMPORTANCE_HIGH
+                    NotificationManager.IMPORTANCE_LOW
             );
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
