@@ -16,7 +16,6 @@ import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
-import android.media.VolumeProvider;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -58,6 +57,8 @@ public class EmergencyService extends Service {
     
     private long firstPressTime = 0;
     private int lastDirection = 0;
+    private long lastAdjustmentTime = 0;
+    private boolean isSelfAdjusting = false;
     private final Handler detectionHandler = new Handler(Looper.getMainLooper());
     private boolean isTriggered = false;
 
@@ -81,28 +82,178 @@ public class EmergencyService extends Service {
         }
     };
 
+    private final BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction() == null) return;
+            
+            if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
+                Log.i(TAG, "Screen OFF detected. Enabling bypass mode.");
+                enableScreenOffBypass();
+            } else if (intent.getAction().equals(Intent.ACTION_SCREEN_ON)) {
+                Log.i(TAG, "Screen ON detected. Disabling bypass mode.");
+                disableScreenOffBypass();
+            }
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         createNotificationChannel();
         
+        IntentFilter smsFilter = new IntentFilter(ACTION_SMS_SENT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(smsSentReceiver, new IntentFilter(ACTION_SMS_SENT), Context.RECEIVER_EXPORTED);
+            registerReceiver(smsSentReceiver, smsFilter, Context.RECEIVER_EXPORTED);
         } else {
-            registerReceiver(smsSentReceiver, new IntentFilter(ACTION_SMS_SENT));
+            registerReceiver(smsSentReceiver, smsFilter);
         }
+
+        IntentFilter screenFilter = new IntentFilter();
+        screenFilter.addAction(Intent.ACTION_SCREEN_ON);
+        screenFilter.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screenStateReceiver, screenFilter);
 
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Nugon:EmergencyWakeLock");
         }
         
+        // Initial state check
+        if (pm != null && !pm.isInteractive()) {
+            enableScreenOffBypass();
+        }
+    }
+
+    private void enableScreenOffBypass() {
         setupMediaSession();
         startSilentAudio();
     }
 
+    private void disableScreenOffBypass() {
+        if (silentAudioTrack != null) {
+            try {
+                silentAudioTrack.stop();
+                silentAudioTrack.release();
+                silentAudioTrack = null;
+                Log.d(TAG, "Silent audio stopped.");
+            } catch (Exception ignored) {}
+        }
+        if (mediaSession != null) {
+            mediaSession.setActive(false);
+            mediaSession.release();
+            mediaSession = null;
+            Log.d(TAG, "MediaSession deactivated.");
+        }
+        
+        // Refresh notification to remove media style if needed
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(1, getNotification());
+        }
+    }
+
+    private void setupMediaSession() {
+        if (mediaSession != null) return;
+
+        mediaSession = new MediaSessionCompat(this, "NugonEmergencySession");
+        
+        MediaMetadataCompat metadata = new MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Protección Nugon SOS")
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Activo")
+                .build();
+        mediaSession.setMetadata(metadata);
+
+        VolumeProviderCompat volumeProvider = new VolumeProviderCompat(VolumeProviderCompat.VOLUME_CONTROL_RELATIVE, 100, 50) {
+            @Override
+            public void onAdjustVolume(int direction) {
+                handleVolumeKey(direction);
+            }
+        };
+
+        mediaSession.setPlaybackToRemote(volumeProvider);
+        mediaSession.setActive(true);
+        
+        PlaybackStateCompat state = new PlaybackStateCompat.Builder()
+                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1.0f)
+                .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE)
+                .build();
+        mediaSession.setPlaybackState(state);
+        Log.i(TAG, "MediaSession setup complete and active.");
+    }
+
+    private synchronized void handleVolumeKey(int direction) {
+        if (isSelfAdjusting || isTriggered) return;
+
+        // In bypass mode (Screen OFF), we must manually adjust volume to avoid user frustration
+        // but we only do it here because if screen is ON, system handles it.
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastAdjustmentTime < 100) return;
+
+        isSelfAdjusting = true;
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI);
+            }
+            lastAdjustmentTime = System.currentTimeMillis();
+        } finally {
+            isSelfAdjusting = false;
+        }
+
+        checkLongPress(direction);
+    }
+
+    private void checkLongPress(int direction) {
+        long currentTime = System.currentTimeMillis();
+        if (firstPressTime == 0 || direction != lastDirection) {
+            vibrate(50); // Diagnostic vibration (only happens when screen is OFF in this mode)
+            firstPressTime = currentTime;
+            lastDirection = direction;
+        } else {
+            if (currentTime - firstPressTime >= LONG_PRESS_THRESHOLD) {
+                Log.i(TAG, "Emergency threshold met!");
+                isTriggered = true;
+                triggerEmergency();
+                firstPressTime = 0;
+            }
+        }
+
+        detectionHandler.removeCallbacksAndMessages(null);
+        detectionHandler.postDelayed(() -> {
+            if (!isTriggered) {
+                firstPressTime = 0;
+            }
+        }, 500);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        startForeground(1, getNotification());
+
+        String action = intent != null ? intent.getAction() : null;
+        Log.i(TAG, "onStartCommand with action: " + action);
+
+        if (ACTION_TRIGGER_EMERGENCY.equals(action)) {
+            if (!isTriggered) {
+                isTriggered = true;
+                triggerEmergency();
+            }
+        } else {
+            // ACTION_START_MONITOR or restart: check screen state
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null && !pm.isInteractive()) {
+                enableScreenOffBypass();
+            }
+        }
+        
+        return START_STICKY;
+    }
+
     private void startSilentAudio() {
+        if (silentAudioTrack != null && silentAudioTrack.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) return;
+        
         try {
             int sampleRate = 44100;
             int minBufferSize = AudioTrack.getMinBufferSize(sampleRate, 
@@ -139,107 +290,20 @@ public class EmergencyService extends Service {
             }
 
             silentAudioTrack.play();
-            Log.i(TAG, "Silent audio loop started to keep volume buttons active.");
+            Log.i(TAG, "Silent audio loop started.");
         } catch (Exception e) {
             Log.e(TAG, "Failed to start silent audio", e);
         }
-    }
-
-    private void setupMediaSession() {
-        if (mediaSession != null) return;
-
-        mediaSession = new MediaSessionCompat(this, "NugonEmergencySession");
-        
-        MediaMetadataCompat metadata = new MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Protección Nugon SOS")
-                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Activo")
-                .build();
-        mediaSession.setMetadata(metadata);
-
-        VolumeProviderCompat volumeProvider = new VolumeProviderCompat(VolumeProviderCompat.VOLUME_CONTROL_RELATIVE, 100, 50) {
-            @Override
-            public void onAdjustVolume(int direction) {
-                handleVolumeKey(direction);
-            }
-        };
-
-        mediaSession.setPlaybackToRemote(volumeProvider);
-        mediaSession.setActive(true);
-        
-        PlaybackStateCompat state = new PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1.0f)
-                .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE)
-                .build();
-        mediaSession.setPlaybackState(state);
-        Log.i(TAG, "MediaSession setup complete and active.");
-    }
-
-    private synchronized void handleVolumeKey(int direction) {
-        long currentTime = System.currentTimeMillis();
-        
-        if (isTriggered) return;
-
-        if (firstPressTime == 0 || direction != lastDirection) {
-            vibrate(50); // Diagnostic vibration only on first press
-            firstPressTime = currentTime;
-            lastDirection = direction;
-            Log.d(TAG, "Volume press start, direction: " + direction);
-        } else {
-            if (currentTime - firstPressTime >= LONG_PRESS_THRESHOLD) {
-                Log.i(TAG, "Emergency threshold met via MediaSession!");
-                isTriggered = true;
-                triggerEmergency();
-                firstPressTime = 0;
-            }
-        }
-        
-        detectionHandler.removeCallbacksAndMessages(null);
-        detectionHandler.postDelayed(() -> {
-            if (!isTriggered) {
-                firstPressTime = 0;
-            }
-        }, 500);
-    }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(1, getNotification());
-
-        String action = intent != null ? intent.getAction() : null;
-        Log.i(TAG, "onStartCommand with action: " + action);
-
-        if (ACTION_TRIGGER_EMERGENCY.equals(action)) {
-            if (!isTriggered) {
-                isTriggered = true;
-                triggerEmergency();
-            }
-        } else {
-            setupMediaSession();
-            if (silentAudioTrack == null || silentAudioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                startSilentAudio();
-            }
-        }
-        
-        return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
         try {
             unregisterReceiver(smsSentReceiver);
+            unregisterReceiver(screenStateReceiver);
         } catch (Exception ignored) {}
         
-        if (silentAudioTrack != null) {
-            try {
-                silentAudioTrack.stop();
-                silentAudioTrack.release();
-            } catch (Exception ignored) {}
-        }
-
-        if (mediaSession != null) {
-            mediaSession.setActive(false);
-            mediaSession.release();
-        }
+        disableScreenOffBypass();
         
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
@@ -248,7 +312,7 @@ public class EmergencyService extends Service {
     }
 
     private void triggerEmergency() {
-        vibrate(1000); // Restored to original 1 second for better emergency feedback
+        vibrate(1000); 
         
         if (wakeLock != null && !wakeLock.isHeld()) {
             wakeLock.acquire(15000); 
@@ -364,7 +428,7 @@ public class EmergencyService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setOngoing(true);
 
-        if (mediaSession != null) {
+        if (mediaSession != null && mediaSession.isActive()) {
             builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
                     .setMediaSession(mediaSession.getSessionToken())
                     .setShowActionsInCompactView(0));
