@@ -42,6 +42,15 @@ public class NugonAccessibilityService extends AccessibilityService {
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Nugon:A11yWakeLock");
         }
+
+        // Redundant trigger: ensure EmergencyService monitor is running
+        Intent intent = new Intent(this, EmergencyService.class);
+        intent.setAction(EmergencyService.ACTION_START_MONITOR);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
     }
 
     @Override
