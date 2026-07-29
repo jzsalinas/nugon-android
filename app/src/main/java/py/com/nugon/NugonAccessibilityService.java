@@ -3,6 +3,7 @@ package py.com.nugon;
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -11,6 +12,8 @@ import android.os.Vibrator;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 import android.util.Log;
+
+import androidx.core.content.ContextCompat;
 
 public class NugonAccessibilityService extends AccessibilityService {
     private static final String TAG = "NugonA11yService";
@@ -43,13 +46,15 @@ public class NugonAccessibilityService extends AccessibilityService {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Nugon:A11yWakeLock");
         }
 
-        // Redundant trigger: ensure EmergencyService monitor is running
-        Intent intent = new Intent(this, EmergencyService.class);
-        intent.setAction(EmergencyService.ACTION_START_MONITOR);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            startForegroundService(intent);
-        } else {
-            startService(intent);
+        // Android 14+ Guard: ensure permissions are present before redundant trigger
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            Intent intent = new Intent(this, EmergencyService.class);
+            intent.setAction(EmergencyService.ACTION_START_MONITOR);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
+            }
         }
     }
 

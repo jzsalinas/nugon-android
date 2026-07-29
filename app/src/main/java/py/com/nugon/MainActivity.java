@@ -42,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
         messageEditText = findViewById(R.id.messageEditText);
         senderIdEditText = findViewById(R.id.senderIdEditText);
         Button saveButton = findViewById(R.id.saveButton);
+        Button permissionsButton = findViewById(R.id.permissionsButton);
         Button accessibilityButton = findViewById(R.id.accessibilityButton);
         Button batteryButton = findViewById(R.id.batteryButton);
         Button testButton = findViewById(R.id.testButton);
@@ -61,6 +62,8 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show();
             startMonitor();
         });
+
+        permissionsButton.setOnClickListener(v -> requestPermissions());
 
         accessibilityButton.setOnClickListener(v -> {
             Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
@@ -109,6 +112,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateServiceStatus() {
+        Button permissionsButton = findViewById(R.id.permissionsButton);
+        if (areBasicPermissionsGranted()) {
+            permissionsButton.setText("Permisos: Concedidos ✅");
+            permissionsButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
+            permissionsButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
+        } else {
+            permissionsButton.setText("Conceder Permisos Básicos ⚠️");
+            permissionsButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark));
+            permissionsButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
+        }
+
         Button accessibilityButton = findViewById(R.id.accessibilityButton);
         if (isAccessibilityServiceEnabled()) {
             accessibilityButton.setText("Servicio Activo ✅");
@@ -158,6 +172,34 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    private boolean areBasicPermissionsGranted() {
+        String[] permissions = {
+                Manifest.permission.SEND_SMS,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+        };
+
+        for (String p : permissions) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void requestPermissions() {
         String[] permissions = {
                 Manifest.permission.SEND_SMS,
@@ -165,31 +207,32 @@ public class MainActivity extends AppCompatActivity {
                 Manifest.permission.ACCESS_COARSE_LOCATION
         };
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Background location is requested separately or as part of the list on some versions
-            String[] extendedPerms = new String[permissions.length + 1];
-            System.arraycopy(permissions, 0, extendedPerms, 0, permissions.length);
-            extendedPerms[permissions.length] = Manifest.permission.ACCESS_BACKGROUND_LOCATION;
-            permissions = extendedPerms;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            String[] newPerms = new String[permissions.length + 1];
-            System.arraycopy(permissions, 0, newPerms, 0, permissions.length);
-            newPerms[permissions.length] = Manifest.permission.POST_NOTIFICATIONS;
-            permissions = newPerms;
-        }
-
-        boolean allGranted = true;
+        // On Android 10+ (Q), we need to request background location separately
+        // On Android 13+ (Tiramisu), we add POST_NOTIFICATIONS
+        
+        boolean needsForeground = false;
         for (String p : permissions) {
             if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                allGranted = false;
+                needsForeground = true;
                 break;
             }
         }
 
-        if (!allGranted) {
+        if (needsForeground) {
             ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
+        } else {
+            // Foreground granted, check background
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    // Show a message to the user explaining why we need background location
+                    Toast.makeText(this, "Por favor, elige 'Permitir todo el tiempo' para la ubicación", Toast.LENGTH_LONG).show();
+                    ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, PERMISSION_REQUEST_CODE);
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, PERMISSION_REQUEST_CODE);
+                    }
+                }
+            }
         }
     }
 

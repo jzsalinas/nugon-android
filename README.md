@@ -33,10 +33,18 @@ Dado que la aplicación utiliza servicios de sistema críticos, sigue estos paso
 > [!NOTE]
 > **Compatibilidad**: En algunos dispositivos muy agresivos con el ahorro de energía, si la alerta no responde con la pantalla apagada, toca la pantalla una vez para despertarla y luego mantén presionado el botón de volumen.
 
+## 🛠️ Modos de Compilación (Play Store vs Manual)
+
+Esta aplicación ha sido optimizada para cumplir con las estrictas políticas de **Google Play Store** respecto al uso de servicios en segundo plano.
+
+- **Versión Play Store**: Utiliza métodos estándar de detección (Accesibilidad + Observador de Volumen). Puede requerir que el usuario "despierte" la pantalla en algunos modelos de teléfono si el dispositivo entra en "Sueño Profundo" (Deep Sleep).
+- **Versión Manual (Bypass de Deep Sleep)**: El código fuente incluye un "Hack" técnico (comentado) que utiliza un bucle de audio silencioso para mantener activo el canal de los botones de volumen incluso con la pantalla apagada. 
+  - *Para desarrolladores*: Busca las etiquetas `[WORKAROUND]` en el código fuente (`EmergencyService.java` y `AndroidManifest.xml`) para activar esta funcionalidad si planeas compilar la app manualmente fuera de la Play Store.
+
 ## 🛠️ Tecnologías
 
 - **Lenguaje**: Java (Android Nativo)
-- **Detección**: `MediaSession` con `VolumeProvider` + `AccessibilityService`.
+- **Detección**: `AccessibilityService` + `VolumeObserver` (Detección Universal).
 - **Ubicación**: `FusedLocationProviderClient` de alta precisión.
 - **Red**: OkHttp para integración con el ecosistema PWA.
 

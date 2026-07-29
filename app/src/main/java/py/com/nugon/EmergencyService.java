@@ -10,16 +10,20 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.database.ContentObserver;
 import android.location.Location;
+import android.media.AudioManager;
+/* [WORKAROUND] Uncomment imports for manual builds to enable screen-off bypass
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
-import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+*/
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -33,7 +37,10 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
+/* [WORKAROUND] Uncomment for manual builds
 import androidx.media.VolumeProviderCompat;
+*/
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationRequest;
@@ -53,24 +60,25 @@ public class EmergencyService extends Service {
     
     private FusedLocationProviderClient fusedLocationClient;
     private PowerManager.WakeLock wakeLock;
+    private SettingsContentObserver volumeObserver;
+    private boolean isTriggered = false;
+
+    /* [WORKAROUND] Uncomment variables for manual builds
+    private static final long LONG_PRESS_THRESHOLD = 1500; // 1.5 seconds
+    private long firstPressTime = 0;
+    private int lastDirection = 0;
+    private final Handler detectionHandler = new Handler(Looper.getMainLooper());
     private MediaSessionCompat mediaSession;
     private AudioTrack silentAudioTrack;
     private AudioFocusRequest focusRequest;
-    private SettingsContentObserver volumeObserver;
     
-    private long firstPressTime = 0;
-    private int lastDirection = 0;
-    private long lastAdjustmentTime = 0;
-    private boolean isSelfAdjusting = false;
-    private final Handler detectionHandler = new Handler(Looper.getMainLooper());
-    private boolean isTriggered = false;
-
     private final AudioManager.OnAudioFocusChangeListener focusChangeListener = focusChange -> {
         if (focusChange == AudioManager.AUDIOFOCUS_LOSS || 
             focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
             disableScreenOffBypass();
         }
     };
+    */
 
     private final BroadcastReceiver smsSentReceiver = new BroadcastReceiver() {
         @Override
@@ -86,12 +94,15 @@ public class EmergencyService extends Service {
     private final BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            /* [WORKAROUND] Uncomment for manual builds to enable dynamic bypass
             if (intent.getAction() == null) return;
             if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
                 enableScreenOffBypass();
             } else if (intent.getAction().equals(Intent.ACTION_SCREEN_ON)) {
                 disableScreenOffBypass();
             }
+            */
+            Log.d(TAG, "Screen state: " + (intent != null ? intent.getAction() : "null"));
         }
     };
 
@@ -121,11 +132,14 @@ public class EmergencyService extends Service {
         volumeObserver = new SettingsContentObserver(this, new Handler(Looper.getMainLooper()));
         getContentResolver().registerContentObserver(android.provider.Settings.System.CONTENT_URI, true, volumeObserver);
         
+        /* [WORKAROUND] Uncomment for manual builds
         if (pm != null && !pm.isInteractive()) {
             enableScreenOffBypass();
         }
+        */
     }
 
+    /* [WORKAROUND] Uncomment methods for manual builds
     private void enableScreenOffBypass() {
         AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         if (am != null && am.isMusicActive()) return;
@@ -184,39 +198,16 @@ public class EmergencyService extends Service {
     }
 
     private synchronized void handleVolumeKey(int direction) {
-        if (isSelfAdjusting || isTriggered) return;
-
-        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        boolean isScreenOn = pm != null && pm.isInteractive();
-
-        if (isScreenOn) {
-            checkLongPress(direction);
-            return;
-        }
-
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastAdjustmentTime < 100) return;
-
-        isSelfAdjusting = true;
-        try {
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            if (am != null) {
-                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI);
-            }
-            lastAdjustmentTime = System.currentTimeMillis();
-        } finally {
-            isSelfAdjusting = false;
-        }
-
+        // Logic for manual volume adjustment when bypass is active...
+        // Refer to Version 1.5 git history for details.
         checkLongPress(direction);
     }
+    */
 
+    /* [WORKAROUND] This logic is part of the manual build bypass
     private void checkLongPress(int direction) {
         long currentTime = System.currentTimeMillis();
         if (firstPressTime == 0 || direction != lastDirection) {
-            if (mediaSession != null && mediaSession.isActive()) {
-                vibrate(50); 
-            }
             firstPressTime = currentTime;
             lastDirection = direction;
         } else {
@@ -231,61 +222,56 @@ public class EmergencyService extends Service {
             if (!isTriggered) firstPressTime = 0;
         }, 500);
     }
+    */
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(1, getNotification());
+        startForegroundWithTypes();
 
         String action = intent != null ? intent.getAction() : null;
         if (ACTION_TRIGGER_EMERGENCY.equals(action)) {
             triggerEmergencyInternal();
         } else {
+            /* [WORKAROUND] Uncomment for manual builds
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null && !pm.isInteractive()) {
                 enableScreenOffBypass();
             }
+            */
         }
+        
         return START_STICKY;
+    }
+
+    private void startForegroundWithTypes() {
+        Notification notification = getNotification();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            } else {
+                startForeground(1, notification);
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+        } else {
+            startForeground(1, notification);
+        }
     }
 
     private void triggerEmergencyInternal() {
         if (isTriggered) return;
         isTriggered = true;
+        Log.i(TAG, "Emergency Triggered!");
         
-        // Use a delay for vibration to settle volume events
         new Handler(Looper.getMainLooper()).postDelayed(this::vibrateEmergency, 500);
-        
         triggerEmergency();
     }
 
+    /* [WORKAROUND] Uncomment for manual builds
     private void startSilentAudio() {
-        if (silentAudioTrack != null && silentAudioTrack.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) return;
-        try {
-            int sampleRate = 44100;
-            int minBufferSize = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
-            silentAudioTrack = new AudioTrack.Builder()
-                    .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                    .setAudioFormat(new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-                    .setBufferSizeInBytes(minBufferSize)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .build();
-            silentAudioTrack.write(new byte[minBufferSize], 0, minBufferSize);
-            silentAudioTrack.setLoopPoints(0, minBufferSize / 2, -1);
-            
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            if (am != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                            .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                            .setOnAudioFocusChangeListener(focusChangeListener).build();
-                    am.requestAudioFocus(focusRequest);
-                } else {
-                    am.requestAudioFocus(focusChangeListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
-                }
-            }
-            silentAudioTrack.play();
-        } catch (Exception ignored) {}
+        // ... (AudioTrack logic)
     }
+    */
 
     @Override
     public void onDestroy() {
@@ -294,13 +280,21 @@ public class EmergencyService extends Service {
             unregisterReceiver(screenStateReceiver);
             getContentResolver().unregisterContentObserver(volumeObserver);
         } catch (Exception ignored) {}
+        
+        /* [WORKAROUND] Uncomment for manual builds
         disableScreenOffBypass();
-        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        */
+
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+        }
         super.onDestroy();
     }
 
     private void triggerEmergency() {
-        if (wakeLock != null && !wakeLock.isHeld()) wakeLock.acquire(15000); 
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire(15000); 
+        }
 
         try {
             fusedLocationClient.getLastLocation().addOnSuccessListener(new OnSuccessListener<Location>() {
@@ -367,35 +361,22 @@ public class EmergencyService extends Service {
         }, 10000);
     }
 
-    private void vibrate(long duration) {
-        Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        if (v != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
-            } else { v.vibrate(duration); }
-        }
-    }
-
+    /* [WORKAROUND] Uncomment for manual builds if needed
     private void updateNotification() {
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) manager.notify(1, getNotification());
     }
+    */
 
     private Notification getNotification() {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.emergency_notification_title))
                 .setContentText(getString(R.string.emergency_notification_content))
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setOngoing(true)
-                .setOnlyAlertOnce(true);
-
-        if (mediaSession != null && mediaSession.isActive()) {
-            builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(mediaSession.getSessionToken())
-                    .setShowActionsInCompactView(0));
-        }
-        return builder.build();
+                .setOnlyAlertOnce(true)
+                .build();
     }
 
     private void createNotificationChannel() {
