@@ -92,13 +92,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
         requestPermissions();
-        startMonitor();
+        // Removed direct startMonitor() to avoid crash on first run before permissions are granted
     }
 
     private void startMonitor() {
+        if (!areBasicPermissionsGranted()) {
+            Log.w("MainActivity", "Skipping monitor start: Permissions not granted yet.");
+            return;
+        }
         Intent intent = new Intent(this, EmergencyService.class);
         intent.setAction(EmergencyService.ACTION_START_MONITOR);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             startForegroundService(intent);
         } else {
             startService(intent);

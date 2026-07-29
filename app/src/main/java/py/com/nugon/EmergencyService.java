@@ -245,19 +245,24 @@ public class EmergencyService extends Service {
 
     private void startForegroundWithTypes() {
         Notification notification = getNotification();
+        
+        boolean hasFineLocation = ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        boolean hasBackgroundLocation = true;
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            hasBackgroundLocation = ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        // On Android 14+, to start a location FGS from background, we MUST have both Fine AND Background permissions.
+        // If we don't have them, we MUST NOT use the location type or the system will throw a SecurityException.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                /* [WORKAROUND] Uncomment for manual builds
-                startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-                */
+            if (hasFineLocation && hasBackgroundLocation) {
                 startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
             } else {
+                Log.e(TAG, "DANGER: Starting Foreground Service WITHOUT location type. SOS will not have GPS!");
                 startForeground(1, notification);
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            /* [WORKAROUND] Uncomment for manual builds
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-            */
             startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
         } else {
             startForeground(1, notification);
