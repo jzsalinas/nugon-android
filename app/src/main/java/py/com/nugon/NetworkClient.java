@@ -2,6 +2,8 @@ package py.com.nugon;
 
 import android.util.Log;
 
+import org.json.JSONObject;
+
 import java.io.IOException;
 
 import okhttp3.Call;
@@ -23,8 +25,19 @@ public class NetworkClient {
             return;
         }
 
-        String jsonBody = String.format("{\"sender_id\":\"%s\", \"message\":\"%s\", \"latitude\":%f, \"longitude\":%f}", 
-                senderId, message, lat, lon);
+        String jsonBody;
+        try {
+            JSONObject json = new JSONObject();
+            json.put("sender_id", senderId);
+            json.put("message", message);
+            json.put("latitude", lat);
+            json.put("longitude", lon);
+            jsonBody = json.toString();
+            Log.i(TAG, "Sending JSON: " + jsonBody);
+        } catch (Exception e) {
+            Log.e(TAG, "Error building JSON", e);
+            return;
+        }
         
         RequestBody body = RequestBody.create(jsonBody, JSON);
         Request request = new Request.Builder()
