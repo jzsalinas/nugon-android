@@ -13,6 +13,7 @@ Esta aplicación permite enviar alertas de emergencia en menos de 2 segundos med
   - **Notificación PWA (Web Push)**: Envía un payload JSON a un servidor backend para notificar a familiares mediante Web Push.
 - **Confirmación Háptica**: Sistema de vibraciones para confirmar que el botón ha sido detectado y que la alerta ha sido enviada con éxito.
 - **Monitor Permanente**: Servicio en primer plano diseñado para ser indestructible por el sistema de ahorro de energía.
+- **Ubicación Preservada**: Si no hay cobertura de internet o señal celular en el momento de la emergencia, la app captura las coordenadas exactas y encola el mensaje. La alerta se enviará automáticamente con la ubicación original apenas el dispositivo recupere la señal.
 
 ## 🚀 Instalación y Configuración
 
