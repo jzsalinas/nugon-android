@@ -15,6 +15,7 @@ import android.content.pm.ServiceInfo;
 import android.database.ContentObserver;
 import android.location.Location;
 import android.media.AudioManager;
+import android.bluetooth.BluetoothDevice;
 /* [WORKAROUND] Uncomment imports for manual builds to enable screen-off bypass
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
@@ -62,6 +63,15 @@ public class EmergencyService extends Service {
     private PowerManager.WakeLock wakeLock;
     private SettingsContentObserver volumeObserver;
     private boolean isTriggered = false;
+    private long lastAudioTransitionTime = 0;
+
+    private final BroadcastReceiver audioTransitionReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.i(TAG, "Audio transition detected: " + intent.getAction());
+            lastAudioTransitionTime = System.currentTimeMillis();
+        }
+    };
 
     /* [WORKAROUND] Uncomment variables for manual builds
     private static final long LONG_PRESS_THRESHOLD = 1500; // 1.5 seconds
@@ -131,6 +141,12 @@ public class EmergencyService extends Service {
 
         volumeObserver = new SettingsContentObserver(this, new Handler(Looper.getMainLooper()));
         getContentResolver().registerContentObserver(android.provider.Settings.System.CONTENT_URI, true, volumeObserver);
+
+        IntentFilter audioFilter = new IntentFilter();
+        audioFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+        audioFilter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        audioFilter.addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
+        registerReceiver(audioTransitionReceiver, audioFilter);
         
         /* [WORKAROUND] Uncomment for manual builds
         if (pm != null && !pm.isInteractive()) {
@@ -289,6 +305,7 @@ public class EmergencyService extends Service {
         try {
             unregisterReceiver(smsSentReceiver);
             unregisterReceiver(screenStateReceiver);
+            unregisterReceiver(audioTransitionReceiver);
             getContentResolver().unregisterContentObserver(volumeObserver);
         } catch (Exception ignored) {}
         
@@ -406,6 +423,7 @@ public class EmergencyService extends Service {
         private long lastTime = 0;
         private int cumulativeDelta = 0;
         private int lastDir = 0;
+        private int eventCount = 0; // Count distinct change events
 
         public SettingsContentObserver(Context context, Handler handler) {
             super(handler);
@@ -419,17 +437,35 @@ public class EmergencyService extends Service {
             int maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
             long now = System.currentTimeMillis();
 
+            // Ignore volume jumps during audio device transitions (Bluetooth connect/disconnect)
+            if (now - lastAudioTransitionTime < 5000) {
+                lastVol = currentVol; // Sync volume without triggering
+                return;
+            }
+
             if (currentVol != lastVol) {
                 int delta = Math.abs(currentVol - lastVol);
                 int dir = (currentVol > lastVol) ? 1 : -1;
                 
-                if (dir != lastDir || (now - lastTime > 400)) cumulativeDelta = delta;
-                else cumulativeDelta += delta;
+                if (dir != lastDir || (now - lastTime > 400)) {
+                    cumulativeDelta = delta;
+                    eventCount = 1;
+                } else {
+                    cumulativeDelta += delta;
+                    eventCount++;
+                }
 
-                if (cumulativeDelta >= 5 || ((currentVol == 0 || currentVol == maxVol) && delta >= 2)) {
+                // TRIGGER CONDITIONS:
+                // 1. Cumulative delta >= 5 AND at least 2 distinct events (to filter out single-step ducking/sync spikes)
+                // 2. Reached a limit (0 or Max) with a significant cumulative delta and at least 2 events
+                boolean hitLimit = (currentVol == 0 || currentVol == maxVol);
+                
+                if ((cumulativeDelta >= 5 && eventCount >= 2) || (hitLimit && cumulativeDelta >= 2 && eventCount >= 2)) {
                     triggerEmergencyInternal();
                     cumulativeDelta = 0;
+                    eventCount = 0;
                 }
+                
                 lastVol = currentVol;
                 lastTime = now;
                 lastDir = dir;
