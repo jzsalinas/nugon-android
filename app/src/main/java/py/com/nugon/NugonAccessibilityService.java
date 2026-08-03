@@ -18,6 +18,8 @@ import androidx.core.content.ContextCompat;
 public class NugonAccessibilityService extends AccessibilityService {
     private static final String TAG = "NugonA11yService";
     private static final long LONG_PRESS_TIMEOUT = 1500; // 1.5 seconds
+    
+    public static boolean isRunning = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean isButtonPressed = false;
@@ -39,6 +41,7 @@ public class NugonAccessibilityService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        isRunning = true;
         Log.i(TAG, "Nugon Accessibility Service CONNECTED and ready.");
         
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
@@ -94,6 +97,12 @@ public class NugonAccessibilityService extends AccessibilityService {
             return false; 
         }
         return super.onKeyEvent(event);
+    }
+
+    @Override
+    public void onDestroy() {
+        isRunning = false;
+        super.onDestroy();
     }
 
     private void acquireWakeLock() {

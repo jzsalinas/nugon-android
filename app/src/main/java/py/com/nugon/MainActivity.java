@@ -12,11 +12,14 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
+import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -117,22 +120,29 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateServiceStatus() {
         Button permissionsButton = findViewById(R.id.permissionsButton);
+        String permissionMessage = getMissingPermissionMessage();
+        permissionsButton.setText(permissionMessage);
+        
         if (areBasicPermissionsGranted()) {
-            permissionsButton.setText("Permisos: Concedidos ✅");
             permissionsButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
-            permissionsButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         } else {
-            permissionsButton.setText("Conceder Permisos Básicos ⚠️");
             permissionsButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark));
-            permissionsButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         }
+        permissionsButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
 
         Button accessibilityButton = findViewById(R.id.accessibilityButton);
-        if (isAccessibilityServiceEnabled()) {
+        int a11yStatus = getAccessibilityStatus();
+        
+        if (a11yStatus == 2) { // Fully active
             accessibilityButton.setText("Servicio Activo ✅");
             accessibilityButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark));
             accessibilityButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
-        } else {
+        } else if (a11yStatus == 1) { // Enabled in settings but NOT running (Ghost State)
+            accessibilityButton.setText("Servicio Bloqueado ⚠️");
+            accessibilityButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark));
+            accessibilityButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
+            showA11yFixDialog();
+        } else { // Fully disabled
             accessibilityButton.setText("Activar Servicio Accesibilidad ⚠️");
             accessibilityButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark));
             accessibilityButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
@@ -150,6 +160,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void showA11yFixDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Servicio Bloqueado")
+                .setMessage("Android ha pausado el servicio de accesibilidad por inactividad. Para repararlo:\n\n1. Toca el botón rojo.\n2. Desactiva 'Nugon SOS'.\n3. Vuelve a activarlo.")
+                .setPositiveButton("Entendido", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
     private boolean isIgnoringBatteryOptimizations() {
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
@@ -158,22 +176,51 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private boolean isAccessibilityServiceEnabled() {
-        String service = getPackageName() + "/" + NugonAccessibilityService.class.getCanonicalName();
-        int accessibilityEnabled = 0;
+    private int getAccessibilityStatus() {
+        String serviceId = getPackageName() + "/" + NugonAccessibilityService.class.getCanonicalName();
+        
+        // 1. Check if it's enabled in System Settings (the text string)
+        boolean isEnabledInSettings = false;
         try {
-            accessibilityEnabled = Settings.Secure.getInt(getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED);
+            int accessibilityEnabled = Settings.Secure.getInt(getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED);
+            if (accessibilityEnabled == 1) {
+                String settingValue = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                if (settingValue != null && (settingValue.contains(serviceId) || settingValue.contains(getPackageName() + "/.NugonAccessibilityService"))) {
+                    isEnabledInSettings = true;
+                }
+            }
         } catch (Settings.SettingNotFoundException e) {
             Log.e("MainActivity", "Error finding accessibility setting", e);
         }
 
-        if (accessibilityEnabled == 1) {
-            String settingValue = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (settingValue != null) {
-                return settingValue.contains(service);
+        if (!isEnabledInSettings) return 0; // Fully disabled
+
+        // 2. Check if the service is ACTUALLY running (not in a ghost state)
+        if (NugonAccessibilityService.isRunning) {
+            return 2; // Enabled AND Running
+        }
+
+        return 1; // Ghost State: Enabled in settings but NOT running
+    }
+
+    private String getMissingPermissionMessage() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            return "Conceder Permiso SMS ⚠️";
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return "Conceder Permiso GPS ⚠️";
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                return "Permitir GPS 'Todo el tiempo' ⚠️";
             }
         }
-        return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                return "Conceder Notificaciones ⚠️";
+            }
+        }
+        return "Permisos: Concedidos ✅";
     }
 
     private boolean areBasicPermissionsGranted() {
