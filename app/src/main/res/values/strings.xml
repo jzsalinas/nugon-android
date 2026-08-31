@@ -22,4 +22,8 @@
     <string name="instructions_title">💡 ¿Cómo activar la alerta?</string>
     <string name="instructions_content">1. Asegúrate de que el servicio esté activo ✅.\n2. Mantén presionado SUBIR o BAJAR VOLUMEN por 1.5s.\n3. Si no responde, toca la pantalla una vez y vuelve a intentar.\n⚠️ Nota: Para mayor seguridad con pantalla apagada, mantén el volumen entre niveles 3 y 13.</string>
     <string name="permissions_required">Permisos necesarios para funcionar</string>
+    <string name="background_location_disclosure_title">Uso de la ubicación en segundo plano</string>
+    <string name="background_location_disclosure_message">Nugon SOS recopila datos de ubicación para permitir el envío de coordenadas exactas a tus contactos durante una emergencia, incluso cuando la aplicación está cerrada o no está en uso.\n\nEste permiso es fundamental para que tus familiares puedan encontrarte si activas la alerta con la pantalla bloqueada.\n\n¿Deseas conceder este permiso ahora?</string>
+    <string name="accept">Aceptar</string>
+    <string name="deny">No, gracias</string>
 </resources>

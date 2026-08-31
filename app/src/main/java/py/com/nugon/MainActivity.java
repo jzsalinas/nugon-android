@@ -275,9 +275,7 @@ public class MainActivity extends AppCompatActivity {
             // Foreground granted, check background
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                    // Show a message to the user explaining why we need background location
-                    Toast.makeText(this, "Por favor, elige 'Permitir todo el tiempo' para la ubicación", Toast.LENGTH_LONG).show();
-                    ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, PERMISSION_REQUEST_CODE);
+                    showBackgroundLocationDisclosure();
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                         ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, PERMISSION_REQUEST_CODE);
@@ -285,6 +283,20 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
+    }
+
+    private void showBackgroundLocationDisclosure() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.background_location_disclosure_title)
+                .setMessage(R.string.background_location_disclosure_message)
+                .setPositiveButton(R.string.accept, (dialog, which) -> {
+                    ActivityCompat.requestPermissions(this, 
+                            new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, 
+                            PERMISSION_REQUEST_CODE);
+                })
+                .setNegativeButton(R.string.deny, (dialog, which) -> dialog.dismiss())
+                .setCancelable(false)
+                .show();
     }
 
     @Override
