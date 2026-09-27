@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">Nugon SOS</string>
-    <string name="accessibility_service_description">Permite a personas con movilidad limitada solicitar ayuda mediante una pulsación prolongada de volumen. No lee la pantalla ni controla otras aplicaciones.</string>
+    <string name="accessibility_service_description">Permite a personas con movilidad limitada solicitar ayuda mediante una pulsación prolongada de las teclas físicas de volumen. Las demás teclas se ignoran. No lee la pantalla ni controla otras aplicaciones.</string>
     <string name="config_title">Nugon SOS - Configuración</string>
     <string name="contacts_label">Contactos de Emergencia (separados por coma)</string>
     <string name="contacts_hint">+595981123456, +595971987654</string>
@@ -19,13 +19,15 @@
     <string name="instructions_title">💡 ¿Cómo activar la alerta?</string>
     <string name="instructions_content">1. Configura los permisos de alerta.\n2. Activa el servicio de accesibilidad de Nugon.\n3. Mantén presionado SUBIR o BAJAR VOLUMEN durante 1,5 segundos.\n\nLa detección con la pantalla totalmente apagada puede variar según el dispositivo.</string>
 
-    <string name="permissions_required">Permisos necesarios para enviar la alerta</string>
-    <string name="permissions_before_test">Configura los permisos pendientes antes de probar la alerta.</string>
-    <string name="permissions_already_granted">Los permisos de alerta ya están concedidos.</string>
-    <string name="permissions_granted">Permisos de alerta: concedidos ✅</string>
-    <string name="permission_sms_action">Conceder permiso para enviar SMS ⚠️</string>
-    <string name="permission_location_action">Conceder permiso de ubicación ⚠️</string>
-    <string name="permission_background_location_action">Permitir ubicación en segundo plano ⚠️</string>
+    <string name="sms_permission_required">Concede el permiso de SMS para probar ese canal de alerta.</string>
+    <string name="sms_permission_denied">Sin permiso de SMS, el canal SMS no está disponible.</string>
+    <string name="location_permission_denied">Ubicación no concedida. Nugon seguirá enviando alertas sin coordenadas.</string>
+    <string name="test_without_location">La alerta se enviará sin ubicación porque no está disponible.</string>
+    <string name="permissions_already_granted">SMS y ubicación ya están configurados.</string>
+    <string name="permissions_granted">SMS y ubicación listos ✅</string>
+    <string name="permission_sms_action">Conceder permiso SMS para alertas ⚠️</string>
+    <string name="permission_location_action">SMS listo; añadir ubicación (opcional)</string>
+    <string name="permission_background_location_action">SMS listo; ubicación en segundo plano opcional</string>
 
     <string name="background_location_disclosure_title">Uso de la ubicación en segundo plano</string>
     <string name="background_location_disclosure_message">Cuando activas una alerta, Nugon usa tu ubicación para incluirla en el SMS dirigido a tus contactos y, si configuraste un servidor, en la notificación enviada por Internet. Esto también puede ocurrir cuando la aplicación está cerrada o no está en uso. Nugon no realiza seguimiento continuo.\n\nPara permitir alertas con la pantalla bloqueada, continúa a la configuración y selecciona «%1$s» para la ubicación.</string>
@@ -34,7 +36,7 @@
     <string name="cancel">Cancelar</string>
 
     <string name="accessibility_disclosure_title">Servicio de accesibilidad de Nugon</string>
-    <string name="accessibility_disclosure_message">Nugon es una herramienta de accesibilidad para personas con movilidad limitada. El servicio observa únicamente las teclas físicas de volumen para detectar una pulsación prolongada de 1,5 segundos y activar una solicitud de ayuda cuando Nugon no está visible.\n\nNugon no lee texto ni contenido de pantalla, no obtiene árboles de ventanas, no ejecuta gestos y no controla otras aplicaciones. Tampoco transmite datos de accesibilidad.\n\nCuando activas una alerta, Nugon intenta obtener tu ubicación y envía el mensaje configurado por SMS; si configuraste un servidor y hay Internet, también envía la alerta a ese servidor. La ubicación no se obtiene continuamente. El funcionamiento con la pantalla totalmente apagada puede variar según el dispositivo.\n\nSólo se abrirán los Ajustes de accesibilidad si eliges «Continuar a Ajustes».</string>
+    <string name="accessibility_disclosure_message">Nugon es una herramienta de accesibilidad para personas con movilidad limitada. Nugon utiliza el servicio de accesibilidad únicamente para detectar pulsaciones de las teclas físicas de volumen. Las demás teclas se ignoran. Una pulsación prolongada de 1,5 segundos activa una solicitud de ayuda cuando Nugon no está visible.\n\nNugon no lee texto ni contenido de pantalla, no obtiene árboles de ventanas, no ejecuta gestos y no controla otras aplicaciones. Tampoco transmite datos de accesibilidad.\n\nCuando activas una alerta, Nugon intenta obtener tu ubicación y envía el mensaje configurado por SMS; si configuraste un servidor y hay Internet, también envía la alerta a ese servidor. La ubicación no se obtiene continuamente. El funcionamiento con la pantalla totalmente apagada puede variar según el dispositivo.\n\nSólo se abrirán los Ajustes de accesibilidad si eliges «Continuar a Ajustes».</string>
     <string name="continue_to_accessibility_settings">Continuar a Ajustes</string>
     <string name="accessibility_status_active">Servicio de accesibilidad activo ✅</string>
     <string name="accessibility_status_enabled">Servicio habilitado; esperando a Android ⚠️</string>

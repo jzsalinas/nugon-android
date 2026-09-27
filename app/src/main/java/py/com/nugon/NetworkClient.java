@@ -33,9 +33,9 @@ public class NetworkClient {
             json.put("latitude", lat);
             json.put("longitude", lon);
             jsonBody = json.toString();
-            Log.i(TAG, "Sending JSON: " + jsonBody);
         } catch (Exception e) {
-            Log.e(TAG, "Error building JSON", e);
+            Log.e(TAG, "Error building network alert payload: "
+                    + e.getClass().getSimpleName());
             return;
         }
         
@@ -45,10 +45,12 @@ public class NetworkClient {
                 .post(body)
                 .build();
 
+        Log.i(TAG, "Network alert request started");
         client.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                Log.e(TAG, "Failed to send network alert", e);
+                Log.e(TAG, "Network alert request failed: "
+                        + e.getClass().getSimpleName());
             }
 
             @Override

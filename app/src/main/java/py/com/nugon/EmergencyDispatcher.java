@@ -62,13 +62,10 @@ public final class EmergencyDispatcher {
         public void onReceive(Context receiverContext, Intent intent) {
             int part = intent.getIntExtra("part", -1);
             int total = intent.getIntExtra("total", -1);
-            String destination = intent.getStringExtra("destination");
             if (getResultCode() == Activity.RESULT_OK) {
-                Log.i(TAG, "SMS accepted by telephony: destination=" + destination
-                        + ", part=" + (part + 1) + "/" + total);
+                Log.i(TAG, "SMS accepted by telephony: part=" + (part + 1) + "/" + total);
             } else {
-                Log.e(TAG, "SMS rejected by telephony: destination=" + destination
-                        + ", part=" + (part + 1) + "/" + total
+                Log.e(TAG, "SMS rejected by telephony: part=" + (part + 1) + "/" + total
                         + ", result=" + getResultCode());
             }
         }
@@ -86,6 +83,14 @@ public final class EmergencyDispatcher {
     }
 
     public void dispatch() {
+        dispatch(false);
+    }
+
+    public void dispatchFromForeground() {
+        dispatch(true);
+    }
+
+    private void dispatch(boolean foregroundCaller) {
         if (!dispatchInProgress.compareAndSet(false, true)) {
             Log.w(TAG, "Ignoring duplicate emergency trigger while an alert is in progress");
             return;
@@ -95,7 +100,7 @@ public final class EmergencyDispatcher {
         vibrateActivation();
         acquireWakeLock();
 
-        if (!canAccessLocationInBackground()) {
+        if (!canAccessLocation(foregroundCaller)) {
             Log.w(TAG, "Location permission unavailable; sending alert without coordinates");
             finishLocation(null);
             return;
@@ -188,13 +193,16 @@ public final class EmergencyDispatcher {
         mainHandler.postDelayed(clearCooldown, TRIGGER_COOLDOWN_MS);
     }
 
-    private boolean canAccessLocationInBackground() {
+    private boolean canAccessLocation(boolean foregroundCaller) {
         boolean foregroundLocation = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 || ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         if (!foregroundLocation) {
             return false;
+        }
+        if (foregroundCaller) {
+            return true;
         }
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
                 || ContextCompat.checkSelfPermission(
@@ -253,7 +261,7 @@ public final class EmergencyDispatcher {
                 continue;
             }
             try {
-                ArrayList<PendingIntent> sentIntents = createSentIntents(destination, parts.size());
+                ArrayList<PendingIntent> sentIntents = createSentIntents(parts.size());
                 if (parts.size() == 1) {
                     smsManager.sendTextMessage(
                             destination, null, parts.get(0), sentIntents.get(0), null);
@@ -262,7 +270,7 @@ public final class EmergencyDispatcher {
                             destination, null, parts, sentIntents, null);
                 }
             } catch (RuntimeException error) {
-                Log.e(TAG, "Unable to submit SMS for destination=" + destination, error);
+                Log.e(TAG, "Unable to submit SMS: " + error.getClass().getSimpleName());
             }
         }
     }
@@ -292,12 +300,11 @@ public final class EmergencyDispatcher {
         receiverRegistered = false;
     }
 
-    private ArrayList<PendingIntent> createSentIntents(String destination, int totalParts) {
+    private ArrayList<PendingIntent> createSentIntents(int totalParts) {
         ArrayList<PendingIntent> intents = new ArrayList<>(totalParts);
         for (int part = 0; part < totalParts; part++) {
             Intent resultIntent = new Intent(ACTION_SMS_SENT)
                     .setPackage(context.getPackageName())
-                    .putExtra("destination", destination)
                     .putExtra("part", part)
                     .putExtra("total", totalParts);
             intents.add(PendingIntent.getBroadcast(

@@ -90,15 +90,19 @@ public class MainActivity extends AppCompatActivity {
 
     private void testAlert() {
         saveConfiguration();
-        if (!areAllAlertPermissionsGranted()) {
-            Toast.makeText(this, R.string.permissions_before_test, Toast.LENGTH_LONG).show();
-            requestNextAlertPermission();
+        if (!hasSmsPermission()) {
+            Toast.makeText(this, R.string.sms_permission_required, Toast.LENGTH_LONG).show();
+            ActivityCompat.requestPermissions(
+                    this, new String[]{Manifest.permission.SEND_SMS}, REQUEST_SMS);
             return;
+        }
+        if (!hasForegroundLocationPermission()) {
+            Toast.makeText(this, R.string.test_without_location, Toast.LENGTH_LONG).show();
         }
         if (testDispatcher == null) {
             testDispatcher = new EmergencyDispatcher(this);
         }
-        testDispatcher.dispatch();
+        testDispatcher.dispatchFromForeground();
     }
 
     private void updateStatus() {
@@ -106,7 +110,8 @@ public class MainActivity extends AppCompatActivity {
         permissionsButton.setText(getMissingPermissionMessage());
         permissionsButton.setBackgroundColor(ContextCompat.getColor(
                 this,
-                areAllAlertPermissionsGranted()
+                hasSmsPermission() && hasForegroundLocationPermission()
+                        && hasBackgroundLocationPermission()
                         ? android.R.color.holo_green_dark
                         : android.R.color.holo_orange_dark));
         permissionsButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
@@ -160,12 +165,6 @@ public class MainActivity extends AppCompatActivity {
             return getString(R.string.permission_background_location_action);
         }
         return getString(R.string.permissions_granted);
-    }
-
-    private boolean areAllAlertPermissionsGranted() {
-        return hasSmsPermission()
-                && hasForegroundLocationPermission()
-                && hasBackgroundLocationPermission();
     }
 
     private boolean hasSmsPermission() {
@@ -267,17 +266,19 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        boolean granted;
         if (requestCode == REQUEST_SMS) {
-            granted = hasSmsPermission();
+            if (!hasSmsPermission()) {
+                Toast.makeText(this, R.string.sms_permission_denied, Toast.LENGTH_LONG).show();
+            }
         } else if (requestCode == REQUEST_FOREGROUND_LOCATION) {
             // Approximate location is a valid foreground grant on Android 12+.
-            granted = hasForegroundLocationPermission();
+            if (!hasForegroundLocationPermission()) {
+                Toast.makeText(this, R.string.location_permission_denied, Toast.LENGTH_LONG).show();
+            }
         } else {
-            granted = hasBackgroundLocationPermission();
-        }
-        if (!granted) {
-            Toast.makeText(this, R.string.permissions_required, Toast.LENGTH_LONG).show();
+            if (!hasBackgroundLocationPermission()) {
+                Toast.makeText(this, R.string.location_permission_denied, Toast.LENGTH_LONG).show();
+            }
         }
         updateStatus();
     }
