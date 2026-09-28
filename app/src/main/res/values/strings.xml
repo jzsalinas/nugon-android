@@ -4,10 +4,6 @@
     <string name="config_title">Nugon SOS - Configuración</string>
     <string name="contacts_label">Contactos de Emergencia (separados por coma)</string>
     <string name="contacts_hint">+595981123456, +595971987654</string>
-    <string name="backend_url_label">URL de Notificación PWA (Backend)</string>
-    <string name="backend_url_hint">https://tu-servidor.com/api/alerta</string>
-    <string name="sender_id_label">Tu Nombre o ID de Emisor (para familiares)</string>
-    <string name="sender_id_hint">Ej: Prima Maria</string>
     <string name="save_button">Guardar Configuración</string>
     <string name="special_permissions_label">Permisos Especiales</string>
     <string name="permissions_button">Configurar permisos de alerta</string>
@@ -16,6 +12,26 @@
     <string name="message_label">Mensaje de Emergencia (Máx 21 caracteres)</string>
     <string name="message_default">ALERTA DE CONVULSION!</string>
     <string name="config_saved">Configuración guardada</string>
+    <string name="secure_linking_title">Vinculación familiar segura</string>
+    <string name="register_device_button">Inicializar / registrar dispositivo</string>
+    <string name="create_pairing_button">Generar código de vinculación</string>
+    <string name="revoke_links_button">Revocar todas las vinculaciones</string>
+    <string name="backend_status_invalid_url">La URL del servidor debe usar HTTPS.</string>
+    <string name="backend_status_not_initialized">Identidad segura todavía no inicializada.</string>
+    <string name="backend_status_pending">Identidad local lista; registro pendiente para esta URL.</string>
+    <string name="backend_status_registering">Registrando dispositivo…</string>
+    <string name="backend_status_registered">Dispositivo registrado con credencial segura ✅</string>
+    <string name="backend_status_error">No se pudo confirmar el registro.</string>
+    <string name="backend_registered">Dispositivo registrado correctamente.</string>
+    <string name="backend_operation_failed">No se pudo completar la operación con el servidor.</string>
+    <string name="pairing_none">Sin código activo</string>
+    <string name="pairing_generating">Generando…</string>
+    <string name="pairing_failed">No se pudo generar el código</string>
+    <string name="pairing_expires">Vence a las %1$s. Es de un solo uso.</string>
+    <string name="revoke_links_title">Revocar vinculaciones</string>
+    <string name="revoke_links_message">Los familiares vinculados dejarán de recibir alertas Web Push. SMS no se verá afectado.</string>
+    <string name="revoke_links_confirm">Revocar</string>
+    <string name="links_revoked">Vinculaciones revocadas: %1$d</string>
     <string name="instructions_title">💡 ¿Cómo activar la alerta?</string>
     <string name="instructions_content">1. Configura los permisos de alerta.\n2. Activa el servicio de accesibilidad de Nugon.\n3. Mantén presionado SUBIR o BAJAR VOLUMEN durante 1,5 segundos.\n\nLa detección con la pantalla totalmente apagada puede variar según el dispositivo.</string>
 
@@ -30,13 +46,13 @@
     <string name="permission_background_location_action">SMS listo; ubicación en segundo plano opcional</string>
 
     <string name="background_location_disclosure_title">Uso de la ubicación en segundo plano</string>
-    <string name="background_location_disclosure_message">Cuando activas una alerta, Nugon usa tu ubicación para incluirla en el SMS dirigido a tus contactos y, si configuraste un servidor, en la notificación enviada por Internet. Esto también puede ocurrir cuando la aplicación está cerrada o no está en uso. Nugon no realiza seguimiento continuo.\n\nPara permitir alertas con la pantalla bloqueada, continúa a la configuración y selecciona «%1$s» para la ubicación.</string>
+    <string name="background_location_disclosure_message">Cuando activas una alerta, Nugon usa tu ubicación para incluirla en el SMS dirigido a tus contactos y, si existen vinculaciones familiares, en la notificación enviada por Internet. Esto también puede ocurrir cuando la aplicación está cerrada o no está en uso. Nugon no realiza seguimiento continuo.\n\nPara permitir alertas con la pantalla bloqueada, continúa a la configuración y selecciona «%1$s» para la ubicación.</string>
     <string name="background_location_settings_label_fallback">Permitir todo el tiempo</string>
     <string name="continue_to_settings">Continuar a Ajustes</string>
     <string name="cancel">Cancelar</string>
 
     <string name="accessibility_disclosure_title">Servicio de accesibilidad de Nugon</string>
-    <string name="accessibility_disclosure_message">Nugon es una herramienta de accesibilidad para personas con movilidad limitada. Nugon utiliza el servicio de accesibilidad únicamente para detectar pulsaciones de las teclas físicas de volumen. Las demás teclas se ignoran. Una pulsación prolongada de 1,5 segundos activa una solicitud de ayuda cuando Nugon no está visible.\n\nNugon no lee texto ni contenido de pantalla, no obtiene árboles de ventanas, no ejecuta gestos y no controla otras aplicaciones. Tampoco transmite datos de accesibilidad.\n\nCuando activas una alerta, Nugon intenta obtener tu ubicación y envía el mensaje configurado por SMS; si configuraste un servidor y hay Internet, también envía la alerta a ese servidor. La ubicación no se obtiene continuamente. El funcionamiento con la pantalla totalmente apagada puede variar según el dispositivo.\n\nSólo se abrirán los Ajustes de accesibilidad si eliges «Continuar a Ajustes».</string>
+    <string name="accessibility_disclosure_message">Nugon es una herramienta de accesibilidad para personas con movilidad limitada. Nugon utiliza el servicio de accesibilidad únicamente para detectar pulsaciones de las teclas físicas de volumen. Las demás teclas se ignoran. Una pulsación prolongada de 1,5 segundos activa una solicitud de ayuda cuando Nugon no está visible.\n\nNugon no lee texto ni contenido de pantalla, no obtiene árboles de ventanas, no ejecuta gestos y no controla otras aplicaciones. Tampoco transmite datos de accesibilidad.\n\nCuando activas una alerta, Nugon intenta obtener tu ubicación y envía el mensaje configurado por SMS; si hay Internet y existen vinculaciones familiares, también envía una notificación Web Push. La ubicación no se obtiene continuamente. El funcionamiento con la pantalla totalmente apagada puede variar según el dispositivo.\n\nSólo se abrirán los Ajustes de accesibilidad si eliges «Continuar a Ajustes».</string>
     <string name="continue_to_accessibility_settings">Continuar a Ajustes</string>
     <string name="accessibility_status_active">Servicio de accesibilidad activo ✅</string>
     <string name="accessibility_status_enabled">Servicio habilitado; esperando a Android ⚠️</string>

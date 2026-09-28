@@ -2,6 +2,16 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val nugonBackendUrl = providers.gradleProperty("NUGON_BACKEND_URL")
+    .orElse("https://nugon.prisma.com.py/api/v1")
+    .get()
+require(nugonBackendUrl.startsWith("https://")) {
+    "NUGON_BACKEND_URL must use HTTPS"
+}
+val escapedNugonBackendUrl = nugonBackendUrl
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 android {
     namespace = "py.com.nugon"
     compileSdk {
@@ -17,6 +27,8 @@ android {
         versionCode = 10
         versionName = "1.10"
 
+        buildConfigField("String", "NUGON_BACKEND_URL", "\"$escapedNugonBackendUrl\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -30,6 +42,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    buildFeatures {
+        buildConfig = true
     }
 }
 

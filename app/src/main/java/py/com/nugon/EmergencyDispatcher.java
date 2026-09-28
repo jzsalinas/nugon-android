@@ -212,19 +212,18 @@ public final class EmergencyDispatcher {
     private void sendAlerts(Location location) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String contacts = prefs.getString("contacts", "");
-        String backendUrl = prefs.getString("backend_url", "");
         String customMessage = prefs.getString(
                 "emergency_message", context.getString(R.string.message_default));
-        String senderId = prefs.getString("sender_id", "Anónimo");
 
-        double latitude = location == null ? 0 : location.getLatitude();
-        double longitude = location == null ? 0 : location.getLongitude();
-        String message = location == null
+        Double latitude = location == null ? null : location.getLatitude();
+        Double longitude = location == null ? null : location.getLongitude();
+        String smsMessage = location == null
                 ? customMessage
                 : customMessage + " https://maps.google.com/?q=" + latitude + "," + longitude;
 
-        sendSms(contacts, message);
-        NetworkClient.sendAlert(backendUrl, senderId, message, latitude, longitude);
+        sendSms(contacts, smsMessage);
+        NetworkClient.sendAlert(
+                context, BuildConfig.NUGON_BACKEND_URL, customMessage, latitude, longitude);
     }
 
     private void sendSms(String contacts, String message) {

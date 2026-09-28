@@ -11,6 +11,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -18,6 +19,9 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import java.text.DateFormat;
+import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
@@ -27,11 +31,16 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_BACKGROUND_LOCATION = 102;
 
     private EditText contactsEditText;
-    private EditText backendUrlEditText;
     private EditText messageEditText;
-    private EditText senderIdEditText;
+    private TextView backendStatusText;
+    private TextView pairingCodeText;
+    private TextView pairingExpiryText;
+    private Button registerDeviceButton;
+    private Button createPairingButton;
+    private Button revokeLinksButton;
     private SharedPreferences prefs;
     private EmergencyDispatcher testDispatcher;
+    private DeviceCredentials deviceCredentials;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,21 +50,27 @@ public class MainActivity extends AppCompatActivity {
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
 
         contactsEditText = findViewById(R.id.contactsEditText);
-        backendUrlEditText = findViewById(R.id.backendUrlEditText);
         messageEditText = findViewById(R.id.messageEditText);
-        senderIdEditText = findViewById(R.id.senderIdEditText);
+        backendStatusText = findViewById(R.id.backendStatusText);
+        pairingCodeText = findViewById(R.id.pairingCodeText);
+        pairingExpiryText = findViewById(R.id.pairingExpiryText);
+        registerDeviceButton = findViewById(R.id.registerDeviceButton);
+        createPairingButton = findViewById(R.id.createPairingButton);
+        revokeLinksButton = findViewById(R.id.revokeLinksButton);
         Button saveButton = findViewById(R.id.saveButton);
         Button permissionsButton = findViewById(R.id.permissionsButton);
         Button accessibilityButton = findViewById(R.id.accessibilityButton);
         Button testButton = findViewById(R.id.testButton);
 
         contactsEditText.setText(prefs.getString("contacts", ""));
-        backendUrlEditText.setText(prefs.getString("backend_url", ""));
         messageEditText.setText(prefs.getString(
                 "emergency_message", getString(R.string.message_default)));
-        senderIdEditText.setText(prefs.getString("sender_id", ""));
+        deviceCredentials = new DeviceCredentials(this);
 
         saveButton.setOnClickListener(view -> saveConfiguration());
+        registerDeviceButton.setOnClickListener(view -> registerDevice());
+        createPairingButton.setOnClickListener(view -> createPairing());
+        revokeLinksButton.setOnClickListener(view -> confirmRevokeLinks());
         permissionsButton.setOnClickListener(view -> requestNextAlertPermission());
         accessibilityButton.setOnClickListener(view -> showAccessibilityDisclosure());
         testButton.setOnClickListener(view -> testAlert());
@@ -81,9 +96,9 @@ public class MainActivity extends AppCompatActivity {
     private void saveConfiguration() {
         prefs.edit()
                 .putString("contacts", contactsEditText.getText().toString())
-                .putString("backend_url", backendUrlEditText.getText().toString())
                 .putString("emergency_message", messageEditText.getText().toString())
-                .putString("sender_id", senderIdEditText.getText().toString())
+                .remove("sender_id")
+                .remove("backend_url")
                 .apply();
         Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show();
     }
@@ -132,6 +147,114 @@ public class MainActivity extends AppCompatActivity {
                     this, android.R.color.holo_orange_dark));
         }
         accessibilityButton.setTextColor(ContextCompat.getColor(this, android.R.color.white));
+        updateBackendStatus();
+    }
+
+    private void updateBackendStatus() {
+        try {
+            String canonicalUrl = NetworkClient.canonicalBackendUrl(BuildConfig.NUGON_BACKEND_URL);
+            if (deviceCredentials.isRegisteredFor(canonicalUrl)) {
+                backendStatusText.setText(R.string.backend_status_registered);
+            } else if (deviceCredentials.hasCredentials()) {
+                backendStatusText.setText(R.string.backend_status_pending);
+            } else {
+                backendStatusText.setText(R.string.backend_status_not_initialized);
+            }
+        } catch (IllegalArgumentException error) {
+            backendStatusText.setText(R.string.backend_status_invalid_url);
+        }
+    }
+
+    private void registerDevice() {
+        saveConfiguration();
+        String backendUrl = BuildConfig.NUGON_BACKEND_URL;
+        setBackendButtonsEnabled(false);
+        backendStatusText.setText(R.string.backend_status_registering);
+        NetworkClient.registerDevice(this, backendUrl, new NetworkClient.ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void ignored) {
+                setBackendButtonsEnabled(true);
+                backendStatusText.setText(R.string.backend_status_registered);
+                Toast.makeText(MainActivity.this,
+                        R.string.backend_registered, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onError(@NonNull String errorCode) {
+                setBackendButtonsEnabled(true);
+                backendStatusText.setText(R.string.backend_status_error);
+                Toast.makeText(MainActivity.this,
+                        R.string.backend_operation_failed, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void createPairing() {
+        saveConfiguration();
+        String backendUrl = BuildConfig.NUGON_BACKEND_URL;
+        setBackendButtonsEnabled(false);
+        pairingCodeText.setText(R.string.pairing_generating);
+        pairingExpiryText.setText("");
+        NetworkClient.createPairing(this, backendUrl,
+                new NetworkClient.ResultCallback<NetworkClient.Pairing>() {
+                    @Override
+                    public void onSuccess(NetworkClient.Pairing pairing) {
+                        setBackendButtonsEnabled(true);
+                        backendStatusText.setText(R.string.backend_status_registered);
+                        pairingCodeText.setText(pairing.code);
+                        String expiry = DateFormat.getTimeInstance(DateFormat.SHORT)
+                                .format(new Date(pairing.expiresAt));
+                        pairingExpiryText.setText(getString(R.string.pairing_expires, expiry));
+                    }
+
+                    @Override
+                    public void onError(@NonNull String errorCode) {
+                        setBackendButtonsEnabled(true);
+                        pairingCodeText.setText(R.string.pairing_failed);
+                        pairingExpiryText.setText("");
+                        Toast.makeText(MainActivity.this,
+                                R.string.backend_operation_failed, Toast.LENGTH_LONG).show();
+                    }
+                });
+    }
+
+    private void confirmRevokeLinks() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.revoke_links_title)
+                .setMessage(R.string.revoke_links_message)
+                .setPositiveButton(R.string.revoke_links_confirm, (dialog, which) -> revokeLinks())
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void revokeLinks() {
+        saveConfiguration();
+        String backendUrl = BuildConfig.NUGON_BACKEND_URL;
+        setBackendButtonsEnabled(false);
+        NetworkClient.revokeAllLinks(this, backendUrl,
+                new NetworkClient.ResultCallback<Integer>() {
+                    @Override
+                    public void onSuccess(Integer removed) {
+                        setBackendButtonsEnabled(true);
+                        pairingCodeText.setText(R.string.pairing_none);
+                        pairingExpiryText.setText("");
+                        Toast.makeText(MainActivity.this,
+                                getString(R.string.links_revoked, removed), Toast.LENGTH_LONG).show();
+                    }
+
+                    @Override
+                    public void onError(@NonNull String errorCode) {
+                        setBackendButtonsEnabled(true);
+                        Toast.makeText(MainActivity.this,
+                                R.string.backend_operation_failed, Toast.LENGTH_LONG).show();
+                    }
+                });
+    }
+
+    private void setBackendButtonsEnabled(boolean enabled) {
+        registerDeviceButton.setEnabled(enabled);
+        createPairingButton.setEnabled(enabled);
+        revokeLinksButton.setEnabled(enabled);
     }
 
     private boolean isAccessibilityServiceEnabled() {
