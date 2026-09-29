@@ -8,9 +8,12 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -23,26 +26,19 @@ import okhttp3.Response;
 
 public final class NetworkClient {
     private static final String TAG = "NetworkClient";
+    private static final String PREFS_NAME = "nugon_prefs";
+    private static final String DISPLAY_NAME_KEY = "display_name";
     private static final OkHttpClient CLIENT = new OkHttpClient();
-    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     private NetworkClient() {
-    }
-
-    public static void registerDevice(
-            @NonNull Context context,
-            @NonNull String backendUrl,
-            @NonNull ResultCallback<Void> callback) {
-        prepareAuthenticatedDevice(
-                context, backendUrl, true, callback, session -> callback.onSuccess(null));
     }
 
     public static void createPairing(
             @NonNull Context context,
             @NonNull String backendUrl,
             @NonNull ResultCallback<Pairing> callback) {
-        prepareAuthenticatedDevice(context, backendUrl, false, callback, session -> {
+        prepareAuthenticatedDevice(context, backendUrl, callback, session -> {
             JSONObject body = new JSONObject();
             Request request = authenticatedRequest(
                     session,
@@ -74,11 +70,58 @@ public final class NetworkClient {
         });
     }
 
+    public static void updateDisplayName(
+            @NonNull Context context,
+            @NonNull String backendUrl,
+            @Nullable String displayName,
+            @NonNull ResultCallback<Void> callback) {
+        prepareAuthenticatedDevice(context, backendUrl, callback,
+                session -> patchDisplayName(session, displayName, callback));
+    }
+
+    private static void patchDisplayName(
+            AuthenticatedSession session,
+            @Nullable String displayName,
+            ResultCallback<Void> callback) {
+        JSONObject body = new JSONObject();
+        try {
+            body.put("displayName",
+                    displayName == null || displayName.isEmpty()
+                            ? JSONObject.NULL
+                            : displayName);
+        } catch (Exception error) {
+            callback.onError("INVALID_DISPLAY_NAME");
+            return;
+        }
+        Request request = authenticatedRequest(
+                session,
+                session.apiBase + "/devices/" + session.credentials.deviceId)
+                .patch(RequestBody.create(body.toString(), JSON))
+                .build();
+        execute(request, new ResponseCallback() {
+            @Override
+            public void onResponse(int statusCode, @Nullable String responseBody) {
+                if (statusCode >= 200 && statusCode < 300) {
+                    callback.onSuccess(null);
+                } else {
+                    callback.onError(statusCode == 400
+                            ? "INVALID_DISPLAY_NAME"
+                            : "DISPLAY_NAME_UPDATE_FAILED");
+                }
+            }
+
+            @Override
+            public void onFailure() {
+                callback.onError("NETWORK_ERROR");
+            }
+        });
+    }
+
     public static void revokeAllLinks(
             @NonNull Context context,
             @NonNull String backendUrl,
             @NonNull ResultCallback<Integer> callback) {
-        prepareAuthenticatedDevice(context, backendUrl, false, callback, session -> {
+        prepareAuthenticatedDevice(context, backendUrl, callback, session -> {
             Request request = authenticatedRequest(
                     session,
                     session.apiBase + "/devices/" + session.credentials.deviceId + "/links")
@@ -106,6 +149,52 @@ public final class NetworkClient {
         });
     }
 
+    public static void getLinkStatus(
+            @NonNull Context context,
+            @NonNull String backendUrl,
+            @NonNull ResultCallback<LinkStatus> callback) {
+        prepareAuthenticatedDevice(context, backendUrl, callback, session -> {
+            Request request = authenticatedRequest(
+                    session,
+                    session.apiBase + "/devices/" + session.credentials.deviceId + "/links")
+                    .get()
+                    .build();
+            execute(request, new ResponseCallback() {
+                @Override
+                public void onResponse(int statusCode, @Nullable String responseBody) {
+                    if (statusCode != 200 || responseBody == null) {
+                        callback.onError("LINK_STATUS_FAILED");
+                        return;
+                    }
+                    try {
+                        JSONObject json = new JSONObject(responseBody);
+                        JSONArray links = json.getJSONArray("links");
+                        JSONArray pairings = json.optJSONArray("pairingStatuses");
+                        Set<Long> unavailablePairings = new HashSet<>();
+                        if (pairings != null) {
+                            for (int index = 0; index < pairings.length(); index++) {
+                                JSONObject pairing = pairings.getJSONObject(index);
+                                String status = pairing.getString("status");
+                                if ("used".equals(status) || "blocked".equals(status)) {
+                                    unavailablePairings.add(pairing.getLong("expiresAt"));
+                                }
+                            }
+                        }
+                        callback.onSuccess(new LinkStatus(
+                                links.length(), unavailablePairings));
+                    } catch (Exception error) {
+                        callback.onError("INVALID_SERVER_RESPONSE");
+                    }
+                }
+
+                @Override
+                public void onFailure() {
+                    callback.onError("NETWORK_ERROR");
+                }
+            });
+        });
+    }
+
     public static void sendAlert(
             @NonNull Context context,
             @Nullable String backendUrl,
@@ -119,7 +208,6 @@ public final class NetworkClient {
         prepareAuthenticatedDevice(
                 context,
                 backendUrl,
-                false,
                 new ResultCallback<Void>() {
                     @Override
                     public void onSuccess(Void ignored) {
@@ -183,10 +271,20 @@ public final class NetworkClient {
         return normalized;
     }
 
+    public static String publicWebUrl(@NonNull String backendUrl) {
+        HttpUrl parsed = HttpUrl.parse(canonicalBackendUrl(backendUrl));
+        if (parsed == null) throw new IllegalArgumentException("INVALID_BACKEND_URL");
+        return parsed.newBuilder()
+                .encodedPath("/")
+                .query(null)
+                .fragment(null)
+                .build()
+                .toString();
+    }
+
     private static <T> void prepareAuthenticatedDevice(
             Context context,
             String backendUrl,
-            boolean forceRegistration,
             ResultCallback<T> errorCallback,
             SessionCallback successCallback) {
         final String normalizedBackend;
@@ -206,7 +304,7 @@ public final class NetworkClient {
         String apiBase = normalizedBackend.endsWith("/api/v1")
                 ? normalizedBackend
                 : normalizedBackend + "/api/v1";
-        if (!forceRegistration && credentialsStore.isRegisteredFor(normalizedBackend)) {
+        if (credentialsStore.isRegisteredFor(normalizedBackend)) {
             successCallback.onReady(new AuthenticatedSession(apiBase, credentials));
             return;
         }
@@ -214,6 +312,11 @@ public final class NetworkClient {
         try {
             json.put("deviceId", credentials.deviceId);
             json.put("deviceSecret", credentials.deviceSecret);
+            String displayName = configuredDisplayName(context);
+            json.put("displayName",
+                    displayName == null || displayName.isEmpty()
+                            ? JSONObject.NULL
+                            : displayName);
         } catch (Exception error) {
             errorCallback.onError("DEVICE_CREDENTIAL_ERROR");
             return;
@@ -243,6 +346,13 @@ public final class NetworkClient {
         });
     }
 
+    @Nullable
+    private static String configuredDisplayName(Context context) {
+        String displayName = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(DISPLAY_NAME_KEY, "");
+        return displayName == null || displayName.isEmpty() ? null : displayName;
+    }
+
     private static Request.Builder authenticatedRequest(
             AuthenticatedSession session,
             String url) {
@@ -256,7 +366,7 @@ public final class NetworkClient {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException error) {
                 Log.e(TAG, "Network request failed: " + error.getClass().getSimpleName());
-                MAIN_HANDLER.post(callback::onFailure);
+                MainHandlerHolder.INSTANCE.post(callback::onFailure);
             }
 
             @Override
@@ -271,7 +381,8 @@ public final class NetworkClient {
                     response.close();
                 }
                 String finalResponseBody = responseBody;
-                MAIN_HANDLER.post(() -> callback.onResponse(statusCode, finalResponseBody));
+                MainHandlerHolder.INSTANCE.post(
+                        () -> callback.onResponse(statusCode, finalResponseBody));
             }
         });
     }
@@ -289,6 +400,20 @@ public final class NetworkClient {
         Pairing(String code, long expiresAt) {
             this.code = code;
             this.expiresAt = expiresAt;
+        }
+    }
+
+    public static final class LinkStatus {
+        public final int linkedCount;
+        private final Set<Long> unavailablePairings;
+
+        LinkStatus(int linkedCount, Set<Long> unavailablePairings) {
+            this.linkedCount = linkedCount;
+            this.unavailablePairings = unavailablePairings;
+        }
+
+        public boolean isPairingUnavailable(long expiresAt) {
+            return unavailablePairings.contains(expiresAt);
         }
     }
 
@@ -310,5 +435,9 @@ public final class NetworkClient {
             this.apiBase = apiBase;
             this.credentials = credentials;
         }
+    }
+
+    private static final class MainHandlerHolder {
+        private static final Handler INSTANCE = new Handler(Looper.getMainLooper());
     }
 }

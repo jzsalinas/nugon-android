@@ -26,6 +26,10 @@ Dado que la aplicación utiliza servicios de sistema críticos, sigue estos paso
    - **Mensaje**: Un texto corto (máx 21 caracteres) para el SMS.
 4. **Vinculación familiar**: Genera un código temporal en Android e introdúcelo en la PWA.
 
+El código visible se conserva localmente hasta que se utiliza o vence. Una actualización normal de
+la aplicación conserva `deviceId`, `deviceSecret` y los vínculos existentes; sólo una ausencia o
+corrupción real de las credenciales locales provoca que se genere una identidad nueva.
+
 > [!NOTE]
 > **Compatibilidad**: En algunos dispositivos muy agresivos con el ahorro de energía, si la alerta no responde con la pantalla apagada, toca la pantalla una vez para despertarla y luego mantén presionado el botón de volumen.
 
